@@ -1,0 +1,182 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users/{userId}
+    // Fields:
+    //   - name: string (required, 1-50 chars)
+    //   - institution: string (optional, 0-100 chars)
+    //   - darkMode: bool (required)
+    //   - updatedAt: string (optional, ISO 8601)
+    //
+    // Collection: users/{userId}/subjects/{subjectId}
+    // Fields:
+    //   - name: string (required, 1-100 chars)
+    //   - professor: string (optional, 0-100 chars)
+    //   - goal: number (required, 0-100)
+    //   - color: string (required, Tailwind class)
+    //   - present: number (required, >= 0)
+    //   - total: number (required, >= 0)
+    //   - schedule: list (optional, strings)
+    //   - userId: string (required, matches owner)
+    //
+    // Collection: users/{userId}/records/{recordId}
+    // Fields:
+    //   - subjectId: string (required)
+    //   - statusId: string (required)
+    //   - date: string (required, ISO 8601)
+    //   - userId: string (required, matches owner)
+    //
+    // Collection: users/{userId}/statuses/{statusId}
+    // Fields:
+    //   - label: string (required, 1-50 chars)
+    //   - color: string (required, Tailwind class)
+    //   - type: string (required, enum: present, absent, neutral)
+    //   - userId: string (required, matches owner)
+    //
+    // Collection: users/{userId}/reminders/{reminderId}
+    // Fields:
+    //   - label: string (required, 1-100 chars)
+    //   - time: string (required, HH:mm format)
+    //   - days: list (required, numbers 0-6)
+    //   - enabled: bool (required)
+    //   - userId: string (required, matches owner)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "kishanvidyarth121006@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function isValidTimeFormat(timeStr) {
+      return timeStr is string && timeStr.matches("^\\d{2}:\\d{2}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUserProfile(data) {
+      return hasRequiredFields(['name', 'darkMode']) &&
+        hasOnlyAllowedFields(['name', 'institution', 'darkMode', 'updatedAt', 'role']) &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 50 &&
+        (!('institution' in data) || (data.institution is string && data.institution.size() <= 100)) &&
+        data.darkMode is bool &&
+        (!('updatedAt' in data) || isValidDateString(data.updatedAt));
+    }
+
+    function isValidSubject(data, userId) {
+      return hasRequiredFields(['name', 'goal', 'color', 'present', 'total', 'userId']) &&
+        hasOnlyAllowedFields(['name', 'professor', 'goal', 'color', 'present', 'total', 'schedule', 'userId']) &&
+        data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+        (!('professor' in data) || (data.professor is string && data.professor.size() <= 100)) &&
+        data.goal is number && data.goal >= 0 && data.goal <= 100 &&
+        data.color is string &&
+        data.present is number && data.present >= 0 &&
+        data.total is number && data.total >= 0 &&
+        (!('schedule' in data) || data.schedule is list) &&
+        data.userId == userId;
+    }
+
+    function isValidRecord(data, userId) {
+      return hasRequiredFields(['subjectId', 'statusId', 'date', 'userId']) &&
+        hasOnlyAllowedFields(['subjectId', 'statusId', 'date', 'userId']) &&
+        data.subjectId is string &&
+        data.statusId is string &&
+        isValidDateString(data.date) &&
+        data.userId == userId;
+    }
+
+    function isValidStatus(data, userId) {
+      return hasRequiredFields(['label', 'color', 'type', 'userId']) &&
+        hasOnlyAllowedFields(['label', 'color', 'type', 'userId']) &&
+        data.label is string && data.label.size() > 0 && data.label.size() <= 50 &&
+        data.color is string &&
+        data.type in ['present', 'absent', 'neutral'] &&
+        data.userId == userId;
+    }
+
+    function isValidReminder(data, userId) {
+      return hasRequiredFields(['label', 'time', 'days', 'enabled', 'userId']) &&
+        hasOnlyAllowedFields(['label', 'time', 'days', 'enabled', 'userId']) &&
+        data.label is string && data.label.size() > 0 && data.label.size() <= 100 &&
+        isValidTimeFormat(data.time) &&
+        data.days is list &&
+        data.enabled is bool &&
+        data.userId == userId;
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUserProfile(request.resource.data) && (!('role' in request.resource.data) || isAdmin());
+      allow update: if isOwner(userId) && isValidUserProfile(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+      allow delete: if isAdmin();
+
+      match /subjects/{subjectId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidSubject(request.resource.data, userId);
+        allow update: if isOwner(userId) && isValidSubject(request.resource.data, userId);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /records/{recordId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidRecord(request.resource.data, userId);
+        allow update: if isOwner(userId) && isValidRecord(request.resource.data, userId);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /statuses/{statusId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidStatus(request.resource.data, userId);
+        allow update: if isOwner(userId) && isValidStatus(request.resource.data, userId);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+
+      match /reminders/{reminderId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId) && isValidReminder(request.resource.data, userId);
+        allow update: if isOwner(userId) && isValidReminder(request.resource.data, userId);
+        allow delete: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

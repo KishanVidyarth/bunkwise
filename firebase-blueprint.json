@@ -1,0 +1,91 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores user-specific settings and profile information.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "User's display name" },
+        "institution": { "type": "string", "description": "User's university or school" },
+        "darkMode": { "type": "boolean", "description": "User's theme preference" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
+      },
+      "required": ["name", "darkMode"]
+    },
+    "Subject": {
+      "title": "Subject",
+      "description": "Represents a course or subject being tracked.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the subject" },
+        "professor": { "type": "string", "description": "Name of the professor" },
+        "goal": { "type": "number", "description": "Target attendance percentage" },
+        "color": { "type": "string", "description": "Tailwind color class" },
+        "present": { "type": "number", "description": "Number of classes attended" },
+        "total": { "type": "number", "description": "Total number of classes" },
+        "schedule": { "type": "array", "items": { "type": "string" }, "description": "Days of the week for classes" },
+        "userId": { "type": "string", "description": "Owner's UID" }
+      },
+      "required": ["name", "goal", "color", "present", "total", "userId"]
+    },
+    "AttendanceRecord": {
+      "title": "Attendance Record",
+      "description": "A single attendance entry for a subject.",
+      "type": "object",
+      "properties": {
+        "subjectId": { "type": "string", "description": "ID of the subject" },
+        "statusId": { "type": "string", "description": "ID of the attendance status used" },
+        "date": { "type": "string", "format": "date-time", "description": "Timestamp of the entry" },
+        "userId": { "type": "string", "description": "Owner's UID" }
+      },
+      "required": ["subjectId", "statusId", "date", "userId"]
+    },
+    "AttendanceStatus": {
+      "title": "Attendance Status",
+      "description": "Customizable attendance status (e.g., Present, Absent, Late).",
+      "type": "object",
+      "properties": {
+        "label": { "type": "string", "description": "Display label" },
+        "color": { "type": "string", "description": "Tailwind color class" },
+        "type": { "type": "string", "enum": ["present", "absent", "neutral"], "description": "Impact on attendance calculation" },
+        "userId": { "type": "string", "description": "Owner's UID" }
+      },
+      "required": ["label", "color", "type", "userId"]
+    },
+    "Reminder": {
+      "title": "Reminder",
+      "description": "Notification reminder settings.",
+      "type": "object",
+      "properties": {
+        "label": { "type": "string", "description": "Reminder message" },
+        "time": { "type": "string", "description": "Time in HH:mm format" },
+        "days": { "type": "array", "items": { "type": "number" }, "description": "Days of the week (0-6)" },
+        "enabled": { "type": "boolean", "description": "Whether the reminder is active" },
+        "userId": { "type": "string", "description": "Owner's UID" }
+      },
+      "required": ["label", "time", "days", "enabled", "userId"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile and settings"
+    },
+    "users/{userId}/subjects/{subjectId}": {
+      "schema": "Subject",
+      "description": "User's courses"
+    },
+    "users/{userId}/records/{recordId}": {
+      "schema": "AttendanceRecord",
+      "description": "User's attendance history"
+    },
+    "users/{userId}/statuses/{statusId}": {
+      "schema": "AttendanceStatus",
+      "description": "User's custom attendance statuses"
+    },
+    "users/{userId}/reminders/{reminderId}": {
+      "schema": "Reminder",
+      "description": "User's notification reminders"
+    }
+  }
+}
